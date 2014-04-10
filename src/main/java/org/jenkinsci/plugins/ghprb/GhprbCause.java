@@ -1,5 +1,7 @@
 package org.jenkinsci.plugins.ghprb;
 
+import com.google.common.base.Optional;
+import hudson.model.AbstractBuild;
 import org.apache.commons.lang.StringUtils;
 
 import hudson.model.Cause;
@@ -30,7 +32,15 @@ public class GhprbCause extends Cause{
         this.url = url;
 	}
 
-	@Override
+    public static Optional<GhprbCause> extractCause(AbstractBuild build) {
+        final Cause cause = build.getCause(GhprbCause.class);
+        if (cause == null || (!(cause instanceof GhprbCause))) {
+            return Optional.absent();
+        }
+        return Optional.of((GhprbCause)cause);
+    }
+
+    @Override
 	public String getShortDescription() {
 		return "GitHub pull request #" + pullID + " of commit " + commit + (merged? " automatically merged." : ".");
 	}

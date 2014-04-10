@@ -2,7 +2,11 @@ package org.jenkinsci.plugins.ghprb;
 
 import com.google.common.annotations.VisibleForTesting;
 import hudson.model.AbstractBuild;
+import hudson.model.AbstractProject;
+import hudson.security.ACL;
 import jenkins.model.Jenkins;
+import org.acegisecurity.Authentication;
+import org.acegisecurity.context.SecurityContextHolder;
 import org.kohsuke.github.*;
 import org.kohsuke.github.GHEventPayload.IssueComment;
 import org.kohsuke.github.GHEventPayload.PullRequest;
@@ -34,6 +38,38 @@ public class GhprbRepository {
         this.reponame = user + "/" + repository;
         this.helper = helper;
         this.pulls = pulls;
+    }
+
+    /**
+     * Gets a Set of GhprbRepository instances from all the known projects in Jenkins.
+     *
+     * @param userName  something like "jenkinsci"
+     * @param repositoryName something like "ghprb"
+     *
+     * @return
+     */
+    public static Set<GhprbRepository> getRepos(String userName, String repositoryName) {
+        final Set<GhprbRepository> ret = new HashSet<GhprbRepository>();
+
+        // We need this to get access to list of repositories
+        Authentication old = SecurityContextHolder.getContext().getAuthentication();
+        SecurityContextHolder.getContext().setAuthentication(ACL.SYSTEM);
+
+        try {
+            for (AbstractProject<?, ?> job : Jenkins.getInstance().getAllItems(AbstractProject.class)) {
+                GhprbTrigger trigger = job.getTrigger(GhprbTrigger.class);
+                if (trigger == null || trigger.getRepository() == null) {
+                    continue;
+                }
+                GhprbRepository r = trigger.getRepository();
+                if ((userName + "/" + repositoryName).equals(r.getName())) {
+                    ret.add(r);
+                }
+            }
+        } finally {
+            SecurityContextHolder.getContext().setAuthentication(old);
+        }
+        return ret;
     }
 
     public void init() {

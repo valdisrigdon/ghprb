@@ -1,12 +1,7 @@
 package org.jenkinsci.plugins.ghprb;
 
 import hudson.Extension;
-import hudson.model.AbstractProject;
 import hudson.model.UnprotectedRootAction;
-import hudson.security.ACL;
-import jenkins.model.Jenkins;
-import org.acegisecurity.Authentication;
-import org.acegisecurity.context.SecurityContextHolder;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.stapler.StaplerRequest;
@@ -14,7 +9,6 @@ import org.kohsuke.stapler.StaplerResponse;
 
 import java.io.IOException;
 import java.io.StringReader;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -71,7 +65,7 @@ public class GhprbRootAction implements UnprotectedRootAction {
 
     private Set<GhprbRepository> getRepos(GHRepository repo) throws IOException {
         try {
-            return getRepos(repo.getOwner().getLogin() + "/" + repo.getName());
+            return GhprbRepository.getRepos(repo.getOwner().getLogin(), repo.getName());
         } catch (Exception ex) {
             logger.log(Level.WARNING, "Can't get a valid owner for repo");
             // this normally happens due to missing "login" field in the owner of the repo
@@ -85,31 +79,8 @@ public class GhprbRootAction implements UnprotectedRootAction {
             int slashIndex = repoUrl.lastIndexOf('/');
             String owner = repoUrl.substring(slashIndex + 1);
             logger.log(Level.INFO, "Parsed {0} from {1}", new Object[]{owner, repoUrl});
-            return getRepos(owner + "/" + repo.getName());
+            return GhprbRepository.getRepos(owner, repo.getName());
         }
     }
 
-    private Set<GhprbRepository> getRepos(String repo) {
-        final Set<GhprbRepository> ret = new HashSet<GhprbRepository>();
-
-        // We need this to get access to list of repositories
-        Authentication old = SecurityContextHolder.getContext().getAuthentication();
-        SecurityContextHolder.getContext().setAuthentication(ACL.SYSTEM);
-
-        try {
-            for (AbstractProject<?, ?> job : Jenkins.getInstance().getAllItems(AbstractProject.class)) {
-                GhprbTrigger trigger = job.getTrigger(GhprbTrigger.class);
-                if (trigger == null || trigger.getRepository() == null) {
-                    continue;
-                }
-                GhprbRepository r = trigger.getRepository();
-                if (repo.equals(r.getName())) {
-                    ret.add(r);
-                }
-            }
-        } finally {
-            SecurityContextHolder.getContext().setAuthentication(old);
-        }
-        return ret;
-    }
 }

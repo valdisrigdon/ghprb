@@ -1,7 +1,8 @@
 package org.jenkinsci.plugins.ghprb;
 
+import com.google.common.base.Optional;
 import hudson.model.AbstractBuild;
-import hudson.model.Cause;
+import hudson.model.BuildListener;
 import hudson.model.Result;
 import hudson.model.queue.QueueTaskFuture;
 import hudson.plugins.git.util.BuildData;
@@ -52,18 +53,12 @@ public class GhprbBuilds {
         return false;
     }
 
-    private GhprbCause getCause(AbstractBuild build) {
-        Cause cause = build.getCause(GhprbCause.class);
-        if (cause == null || (!(cause instanceof GhprbCause))) return null;
-        return (GhprbCause) cause;
-    }
-
     public void onStarted(AbstractBuild build) {
-        GhprbCause c = getCause(build);
-        if (c == null) {
+        Optional<GhprbCause> optionalCause = GhprbCause.extractCause(build);
+        if (!optionalCause.isPresent()) {
             return;
         }
-
+        final GhprbCause c = optionalCause.get();
         repo.createCommitStatus(build, GHCommitState.PENDING, (c.isMerged() ? "Merged build started." : "Build started."), c.getPullID());
         try {
             build.setDescription("<a title=\"" + c.getTitle() + "\" href=\"" + c.getUrl() + "\">PR #" + c.getPullID() + "</a>: " + c.getAbbreviatedTitle());
@@ -73,11 +68,11 @@ public class GhprbBuilds {
     }
 
     public void onCompleted(AbstractBuild build) {
-        GhprbCause c = getCause(build);
-        if (c == null) {
+        Optional<GhprbCause> optionalCause = GhprbCause.extractCause(build);
+        if (!optionalCause.isPresent()) {
             return;
         }
-
+        final GhprbCause c = optionalCause.get();
         // remove the BuildData action that we may have added earlier to avoid
         // having two of them, and because the one we added isn't correct
         // @see GhprbTrigger
@@ -92,15 +87,20 @@ public class GhprbBuilds {
             build.getActions().remove(fakeOne);
         }
 
+        String message = c.isMerged() ? "Merged build finished." : "Build finished.";
         GHCommitState state;
         if (build.getResult() == Result.SUCCESS) {
             state = GHCommitState.SUCCESS;
         } else if (build.getResult() == Result.UNSTABLE) {
             state = GHCommitState.valueOf(GhprbTrigger.getDscp().getUnstableAs());
+        } else if (build.getResult() == Result.NOT_BUILT) {
+            state = GHCommitState.valueOf(GhprbTrigger.getDscp().getNotBuiltAs());
+            message = "Build skipped.";
         } else {
             state = GHCommitState.FAILURE;
         }
-        repo.createCommitStatus(build, state, (c.isMerged() ? "Merged build finished." : "Build finished."), c.getPullID());
+
+        repo.createCommitStatus(build, state, message, c.getPullID());
 
         String publishedURL = GhprbTrigger.getDscp().getPublishedURL();
         if (publishedURL != null && !publishedURL.isEmpty()) {
@@ -136,10 +136,8 @@ public class GhprbBuilds {
 
         // close failed pull request automatically
         if (state == GHCommitState.FAILURE && trigger.isAutoCloseFailedPullRequests()) {
-
             try {
                 GHPullRequest pr = repo.getPullRequest(c.getPullID());
-
                 if (pr.getState().equals(GHIssueState.OPEN)) {
                     repo.closePullRequest(c.getPullID());
                 }

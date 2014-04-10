@@ -3,6 +3,7 @@ package org.jenkinsci.plugins.ghprb;
 import antlr.ANTLRException;
 import com.coravy.hudson.plugins.github.GithubProjectProperty;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Optional;
 import hudson.Extension;
 import hudson.model.*;
 import hudson.model.queue.QueueTaskFuture;
@@ -73,12 +74,12 @@ public class GhprbTrigger extends Trigger<AbstractProject<?, ?>> {
         this.whiteListTargetBranches = whiteListTargetBranches;
     }
 
-    public static GhprbTrigger extractTrigger(AbstractProject p) {
-        Trigger trigger = p.getTrigger(GhprbTrigger.class);
+    public static Optional<GhprbTrigger> extractTrigger(AbstractProject p) {
+        final Trigger trigger = p.getTrigger(GhprbTrigger.class);
         if (trigger == null || (!(trigger instanceof GhprbTrigger))) {
-            return null;
+            return Optional.absent();
         }
-        return (GhprbTrigger) trigger;
+        return Optional.of((GhprbTrigger) trigger);
     }
 
     public static DescriptorImpl getDscp() {
@@ -285,6 +286,7 @@ public class GhprbTrigger extends Trigger<AbstractProject<?, ?>> {
         private Boolean useComments = false;
         private int logExcerptLines = 0;
         private String unstableAs = GHCommitState.FAILURE.name();
+        private String notBuiltAs = GHCommitState.SUCCESS.name();
         private Boolean autoCloseFailedPullRequests = false;
         private String msgSuccess = "Test PASSed.";
         private String msgFailure = "Test FAILed.";
@@ -292,6 +294,7 @@ public class GhprbTrigger extends Trigger<AbstractProject<?, ?>> {
         private transient GhprbGitHub gh;
         // map of jobs (by their fullName) abd their map of pull requests
         private Map<String, ConcurrentMap<Integer, GhprbPullRequest>> jobs;
+
 
         public DescriptorImpl() {
             load();
@@ -326,6 +329,7 @@ public class GhprbTrigger extends Trigger<AbstractProject<?, ?>> {
             useComments = formData.getBoolean("useComments");
             logExcerptLines = formData.getInt("logExcerptLines");
             unstableAs = formData.getString("unstableAs");
+            unstableAs = formData.getString("notBuiltAs");
             autoCloseFailedPullRequests = formData.getBoolean("autoCloseFailedPullRequests");
             msgSuccess = formData.getString("msgSuccess");
             msgFailure = formData.getString("msgFailure");
@@ -413,6 +417,10 @@ public class GhprbTrigger extends Trigger<AbstractProject<?, ?>> {
 
         public String getUnstableAs() {
             return unstableAs;
+        }
+
+        public String getNotBuiltAs() {
+            return notBuiltAs;
         }
 
         public String getMsgSuccess() {
